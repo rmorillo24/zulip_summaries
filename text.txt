@@ -1,0 +1,1 @@
+Namespace(zulip_site=None, zulip_api_key=None, zulip_email=None, zulip_config_file='./.venv/.zuliprc', verbose=False, zulip_client=None, insecure=False, cert_bundle=None, client_cert=None, client_cert_key=None, stream='balena-io/os', topic='balenaOS to balenaOS migrator', filename='history.json')
