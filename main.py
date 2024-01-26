@@ -3,7 +3,6 @@ import streamlit as st
 from random import randrange
 import requests
 from typing import Any, Dict, List
-import ingest
 import rag
 from zulip_helper import ZulipHandler
 
@@ -97,7 +96,7 @@ if "subscriptions" not in st.session_state:
         st.session_state.subscriptions = result["subscriptions"]
 
 if "rag" not in st.session_state:
-    st.session_state.rag = ingest.Rag()
+    st.session_state.rag = rag.Rag()
 
 if "model" not in st.session_state:
     st.session_state.model = ""

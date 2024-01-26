@@ -1,4 +1,4 @@
-#!/mnt/data/Workspace/my-projects/zulip_summaries/.venv/bin/python3
+#!/mnt/data/Workspace/my-projects/zulip_summaries/.venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
