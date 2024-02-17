@@ -39,7 +39,7 @@ class ZulipHandler():
                 found_newest = result["found_newest"]
                 if result["messages"]:
                     for m in result['messages']:
-                        all_messages.extend("[" + m['sender_full_name'] + "] " + m['content'] + "\n")
+                        all_messages.extend("[START] [" + m['sender_full_name'] + "] " + m['content'] + " [END]\n")
                     # Setting the anchor to the next immediate message after the last fetched message.
                     request["anchor"] = result["messages"][-1]["id"] + 1
 
