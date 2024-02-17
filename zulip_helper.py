@@ -38,17 +38,20 @@ class ZulipHandler():
             try:
                 found_newest = result["found_newest"]
                 if result["messages"]:
+                    for m in result['messages']:
+                        all_messages.extend("[" + m['sender_full_name'] + "] " + m['content'] + "\n")
                     # Setting the anchor to the next immediate message after the last fetched message.
                     request["anchor"] = result["messages"][-1]["id"] + 1
 
-                    all_messages.extend(result["messages"])
             except KeyError:
                 # Might occur when the request is not returned with a success status
                 # self.logger(logging.DEBUG, "Error obtaining messages from topic")
                 return ""
+            except :
+                exit
         text = ""
         for m in all_messages:
-            text += " " + m['content']
+            text += m
         
         return text
 
@@ -91,11 +94,17 @@ if __name__ == "__main__":
         topics = zc.search_topic_in_stream(s["stream_id"], "")
         for topic in topics:
             logger.log(logging.DEBUG, topic)
-            filename = "./data/" + stream + "/" + topic.replace('/', '___')
-            if not os.path.exists(filename):
-                logger.debug("getting messages and writting file " + filename)
-                messages = zc.get_topic_messages(stream, topic)
-                with open(filename, 'w') as file:
-                    file.write(messages)
+            messages = zc.get_topic_messages(stream, topic)
+            write_to_file = False
+            if write_to_file:
+                filename = "./data/" + stream + "/" + topic.replace('/', '___')
+                if not os.path.exists(filename):
+                    logger.debug("getting messages and writting file " + filename)
+                    with open(filename, 'w') as file:
+                        file.write(messages)
+                else:
+                    logger.debug("already exists")
             else:
-                logger.debug("already exists")
+                logger.debug(messages)
+                logger.debug("----------------------------")
+           
