@@ -6,11 +6,11 @@ import time
 import box
 import yaml
 import warnings
-from llama_index import VectorStoreIndex, ServiceContext, get_response_synthesizer
-from llama_index.llms import Ollama
-from llama_index.embeddings import OllamaEmbedding
-from llama_index.vector_stores import WeaviateVectorStore
-from llama_index.indices.document_summary import DocumentSummaryIndex
+from llama_index.core import VectorStoreIndex, ServiceContext, get_response_synthesizer
+from llama_index.llms.ollama import Ollama
+from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.vector_stores.weaviate import WeaviateVectorStore
+from llama_index.core import DocumentSummaryIndex
 
 
 def get_rag_response(query, chain, debug=False):

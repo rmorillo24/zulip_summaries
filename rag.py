@@ -1,15 +1,15 @@
 import weaviate
 
-from llama_index import StorageContext, SimpleDirectoryReader, ServiceContext, VectorStoreIndex, Document, get_response_synthesizer
-from llama_index.vector_stores import WeaviateVectorStore
-from llama_index.embeddings import LangchainEmbedding, OllamaEmbedding
-from llama_index.indices.document_summary import DocumentSummaryIndex
-from llama_index.llms import Ollama
-from llama_index.query_engine import RetrieverQueryEngine
-from llama_index.postprocessor import SimilarityPostprocessor
-from llama_index.retrievers import VectorIndexRetriever
-from llama_index.prompts import PromptTemplate
-
+from llama_index.core import StorageContext, ServiceContext, VectorStoreIndex, Document, get_response_synthesizer, Settings
+from llama_index.vector_stores.weaviate import WeaviateVectorStore
+from llama_index.core.embeddings import resolve_embed_model
+from llama_index.core import DocumentSummaryIndex
+from llama_index.llms.ollama import Ollama
+from llama_index.embeddings.ollama import OllamaEmbedding
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.postprocessor import SimilarityPostprocessor
+from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.core import PromptTemplate
 
 import box
 import yaml
@@ -55,17 +55,17 @@ class Rag:
         
         self.client = weaviate.Client(self.cfg.WEAVIATE_URL)
         
-        self.embeddings = OllamaEmbedding(model_name=self.cfg.LLM)
-        
+        Settings.embed_model = OllamaEmbedding(self.cfg.LLM)
+      
         self.llm = Ollama(
             model=self.cfg.LLM,
             base_url=self.cfg.OLLAMA_BASE_URL,
             temperature=self.cfg.TEMPERATURE
         )        
-        self.service_context = ServiceContext.from_defaults(
-            embed_model=self.embeddings,
-            llm=self.llm
-        )        
+        # self.service_context = ServiceContext.from_defaults(
+        #     embed_model=self.embeddings,
+        #     llm=self.llm
+        # )        
         self.vector_store = WeaviateVectorStore(
             weaviate_client=self.client,
             index_name=self.cfg.INDEX_NAME
@@ -77,26 +77,28 @@ class Rag:
         self.summary_response_synthesizer = get_response_synthesizer(
             response_mode="tree_summarize",
             use_async=False,
-            service_context=self.service_context,
+            llm = self.llm,
+            # service_context=self.service_context,
             summary_template=summary_prompt_template
         )
         self.zulip_question_prompt_template = PromptTemplate(ZULIP_QUERY_TEMPLATE)
         self.zulip_question_response_synthesizer = get_response_synthesizer(
             # response_mode="tree_summarize",
             use_async=False,
-            service_context=self.service_context,
+            llm = self.llm,
+            # service_context=self.service_context,
             text_qa_template=self.zulip_question_prompt_template,
         )
 
         self.index_main = VectorStoreIndex.from_vector_store(
             vector_store = self.vector_store,
-            service_context = self.service_context
+            # service_context = self.service_context
         )
         self.retriever = VectorIndexRetriever(
             index=self.index_main,
             similarity_top_k=3,
         )        
-        self.zulip_query_engine = self.index_main.as_query_engine()
+        self.zulip_query_engine = self.index_main.as_query_engine(llm=self.llm)
         # self.zulip_query_engine = RetrieverQueryEngine(
         #     retriever=self.retriever,
         #     response_synthesizer=self.zulip_question_response_synthesizer,
@@ -112,7 +114,8 @@ class Rag:
         # to-do: what happens if title doesn't exists: need to ingest    
         doc_summary_index = DocumentSummaryIndex.from_documents(
             self.documents,
-            service_context=self.service_context,
+            llm = self.llm,
+            # service_context=self.service_context,
             response_synthesizer=self.summary_response_synthesizer,
             show_progress=True)
         print("Building summary index...")
@@ -130,7 +133,7 @@ class Rag:
                 
         print("Building doc index...")
         self.index_doc = VectorStoreIndex.from_documents(self.documents,
-                                                         service_context=self.service_context,
+                                                        #  service_context=self.service_context,
                                                          llm = self.llm,
                                                          show_progress=True,)
         self.doc_query_engine = self.index_doc.as_query_engine()
