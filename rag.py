@@ -8,6 +8,7 @@ from llama_index.llms import Ollama
 from llama_index.query_engine import RetrieverQueryEngine
 from llama_index.postprocessor import SimilarityPostprocessor
 from llama_index.retrievers import VectorIndexRetriever
+from llama_index.prompts import PromptTemplate
 
 
 import box
@@ -18,6 +19,21 @@ import json
 import logger as log
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+
+SUMMARY_TEMPLATE = (
+    "context information is below.\n"
+    "---------------------\n"
+    "{context_str}\n"
+    "---------------------\n"
+    "There are different topics discussed in the information provided.\n"
+    "For each topic create a markdown output with the following structure:\n"
+    "#### Topic:\n"
+    "__Keypoints__:\n"
+    "__Decissions and actions__:\n"
+    # "answer the question: {query_str}\n"
+    # "Answer: "
+)
 
 class Rag:
     def __init__(self, config_path='./.venv/config.yml', model_name = "llama2"):
@@ -44,11 +60,13 @@ class Rag:
         )
         self.storage_context = StorageContext.from_defaults(
             vector_store=self.vector_store
-        )        
+        )
+        summary_prompt_template = PromptTemplate(SUMMARY_TEMPLATE)
         self.response_synthesizer = get_response_synthesizer(
             response_mode="tree_summarize",
             use_async=False,
-            service_context=self.service_context
+            service_context=self.service_context,
+            summary_template=summary_prompt_template
         )        
         self.index_main = VectorStoreIndex.from_vector_store(
             vector_store = self.vector_store,
