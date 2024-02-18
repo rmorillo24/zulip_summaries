@@ -5,19 +5,27 @@ from llama_index.vector_stores.weaviate import WeaviateVectorStore
 from llama_index.core.embeddings import resolve_embed_model
 from llama_index.core import DocumentSummaryIndex
 from llama_index.llms.ollama import Ollama
+from llama_index.llms.langchain import LangChainLLM
+from langchain.embeddings import HuggingFaceEmbeddings
+from llama_index.embeddings.langchain import LangchainEmbedding
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core import PromptTemplate
-
+from llama_index.core.ingestion import IngestionPipeline
+from llama_index.core.node_parser import TokenTextSplitter
+from llama_index.core.extractors import ( TitleExtractor, QuestionsAnsweredExtractor)
 import box
 import yaml
 import warnings
 import rag
 import json
-import logger as log
+import logging
 import os
+import time
+import argparse
+import sys
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -41,7 +49,7 @@ ZULIP_QUERY_TEMPLATE=(
     "---------------------\n"
     "{context_str}\n"
     "---------------------\n"
-    "There are different topics discussed in the information provided.\n"
+    # "There are different topics discussed in the information provided.\n"
     "Use only the knowledge included in the topics to answer the user's question\n"
     "user's question: {query_str}\n"
     "Answer: "
@@ -55,19 +63,30 @@ class Rag:
         
         self.client = weaviate.Client(self.cfg.WEAVIATE_URL)
         
-        Settings.embed_model = OllamaEmbedding(self.cfg.LLM)
+        # Settings.embed_model = OllamaEmbedding(self.cfg.LLM,embed_batch_size=self.cfg.CHUNK_SIZE)
+        lc_embed_model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-mpnet-base-v2"
+        )
+        Settings.embed_model = LangchainEmbedding(langchain_embeddings=lc_embed_model,model_name=self.cfg.LLM,embed_batch_size=self.cfg.CHUNK_SIZE)
       
-        self.llm = Ollama(
-            model=self.cfg.LLM,
-            base_url=self.cfg.OLLAMA_BASE_URL,
-            temperature=self.cfg.TEMPERATURE
-        )        
-        # self.service_context = ServiceContext.from_defaults(
-        #     embed_model=self.embeddings,
-        #     llm=self.llm
+        # self.llm = Ollama(
+        #     model=self.cfg.LLM,
+        #     base_url=self.cfg.OLLAMA_BASE_URL,
+        #     temperature=self.cfg.TEMPERATURE
         # )        
+        self.llm = LangChainLLM(
+            # model=self.cfg.LLM,
+            # base_url=self.cfg.OLLAMA_BASE_URL,
+            # temperature=self.cfg.TEMPERATURE
+            llm=Ollama(
+                model=self.cfg.LLM,
+                base_url=self.cfg.OLLAMA_BASE_URL,
+                temperature=self.cfg.TEMPERATURE
+            )
+        )        
         self.vector_store = WeaviateVectorStore(
             weaviate_client=self.client,
+            # index_name="A1150"
             index_name=self.cfg.INDEX_NAME
         )
         self.storage_context = StorageContext.from_defaults(
@@ -77,33 +96,35 @@ class Rag:
         self.summary_response_synthesizer = get_response_synthesizer(
             response_mode="tree_summarize",
             use_async=False,
-            llm = self.llm,
-            # service_context=self.service_context,
+            # llm = self.llm,
             summary_template=summary_prompt_template
         )
         self.zulip_question_prompt_template = PromptTemplate(ZULIP_QUERY_TEMPLATE)
         self.zulip_question_response_synthesizer = get_response_synthesizer(
             # response_mode="tree_summarize",
             use_async=False,
-            llm = self.llm,
-            # service_context=self.service_context,
+            # llm = self.llm,
             text_qa_template=self.zulip_question_prompt_template,
         )
 
-        self.index_main = VectorStoreIndex.from_vector_store(
+        self.zulip_index = VectorStoreIndex.from_vector_store(
             vector_store = self.vector_store,
-            # service_context = self.service_context
         )
         self.retriever = VectorIndexRetriever(
-            index=self.index_main,
-            similarity_top_k=3,
+            index=self.zulip_index,
+            similarity_top_k=10,
         )        
-        self.zulip_query_engine = self.index_main.as_query_engine(llm=self.llm)
+        self.zulip_query_engine = self.zulip_index.as_query_engine(
+            # llm=self.llm,
+            response_synthesizer=self.zulip_question_response_synthesizer,
+        )
         # self.zulip_query_engine = RetrieverQueryEngine(
         #     retriever=self.retriever,
         #     response_synthesizer=self.zulip_question_response_synthesizer,
-        #     node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)]
+        #     node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.3)]
         # )        
+
+
         self.index_doc = None
         self.documents = []
         self.doc_query_engine = None
@@ -114,8 +135,7 @@ class Rag:
         # to-do: what happens if title doesn't exists: need to ingest    
         doc_summary_index = DocumentSummaryIndex.from_documents(
             self.documents,
-            llm = self.llm,
-            # service_context=self.service_context,
+            # llm = self.llm,
             response_synthesizer=self.summary_response_synthesizer,
             show_progress=True)
         print("Building summary index...")
@@ -126,18 +146,25 @@ class Rag:
     def ingest_text(self, text, title):
         document = Document(text=text, doc_id = title, metadata={"stream": title})
         self.documents = [document]
-        print("Adding doc to index main index...")
-        self.index_main.insert(document, show_progress=True)
-   
-        # self.zulip_query_engine = self.index_main.as_query_engine()
-                
-        print("Building doc index...")
-        self.index_doc = VectorStoreIndex.from_documents(self.documents,
-                                                        #  service_context=self.service_context,
-                                                         llm = self.llm,
-                                                         show_progress=True,)
-        self.doc_query_engine = self.index_doc.as_query_engine()
+        logging.debug("Adding doc to index main index...")
 
+        # transformations = [
+        #     TokenTextSplitter(chunk_size=self.cfg.CHUNK_SIZE, chunk_overlap=128),
+        #     TitleExtractor(nodes=5,
+        #                     # llm=self.llm
+        #                     ),
+        #     QuestionsAnsweredExtractor(questions=3,
+        #                             #    llm=self.llm
+        #                                )
+        # ]
+
+        self.zulip_index.from_documents(
+            [document],
+            storage_context=self.storage_context,
+            show_progress=False,
+            # transformations=transformations
+            )
+        
 
     def ask_doc(self, question):
         print("Asking doc...")
@@ -145,40 +172,68 @@ class Rag:
     
 
     def ask_zulip(self, question):
-        print("Asking zulip...")
+        logger.debug("Asking zulip...")
+        retrieved = self.zulip_query_engine.retrieve(question)
+        for r in retrieved:
+            print(r)
+        # s = self.zulip_query_engine.synthesize(question, retrieved)
+        # print(s)
         return self.zulip_query_engine.query(question)
 
 
 
 
     def ingest_docs_in_folder(self, folder_name, max_files = 100000):
-        processed_files = 0
+        processed_files = 1
+        total_files = 0
+        for _, _, filenames in os.walk(folder_name):
+            total_files += len(filenames)
+
+        duration = 0
+        start_time = time.time()
         for filename in os.listdir(folder_name):
             if (processed_files <= max_files):
                 file_path = os.path.join(folder_name, filename)
-                logger.info("__________________________Processing file: " + file_path)
+                print(f"\rFile {processed_files}/{total_files}. Time to complete: {duration}", end="", flush=True)
                 if os.path.isfile(file_path):
                     text = ""
                     with open(file_path, 'r') as file:
                         text = " ".join(line.rstrip() for line in file)
                     self.ingest_text(text, filename)
                     processed_files += 1
+                    processing_time = time.time() - start_time
+                    estimated_time = ((total_files - processed_files) * processing_time) / processed_files
+                    duration = time.strftime("%H:%M:%S", time.gmtime(estimated_time))
+
+        
+        end_time=time.time()
+        duration = time.strftime("\n\nIngest time: %H:%M:%S", time.gmtime(end_time - start_time))
+        print(duration)
 
 if __name__ == "__main__":
-    logger = log.init_logger(__name__)
-    logger.debug("start")
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(stream=sys.stdout, level = logging.CRITICAL)
+    # logger.addHandler(logging.StreamHandler(stream = sys.stdout))
+    # logging.getLogger("httpcore").setLevel(level = logging.CRITICAL)
+    # logging.getLogger("urllib3").setLevel(level = logging.CRITICAL)
+    # logging.getLogger("httpx").setLevel(level = logging.INFO)
+ 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--ingest', type = str, required = False, help = 'Folder with files to ingest recursively')
+    args = parser.parse_args()
 
     rag = Rag()
 
-    # rag.ingest_docs_in_folder("./data/balena-io___os")
+    if args.ingest:
+        rag.ingest_docs_in_folder(args.ingest)
     
     while True:
         try:
             question = input("\n\n> ")
-
-            print("ZULIP")
+            # question="describe the workarounds or solutions mentioned around beaglebone and the openvpn"
             response = rag.ask_zulip(question)
             print(response)
+            
 
             # print("DOC")
             # response  = rag.ask_doc(question)

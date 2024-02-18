@@ -2,5 +2,6 @@
 .venvold/
 __pycache__/
 data/
+datasample/
 storage/
 zulip_summaries.code-workspace

@@ -52,9 +52,11 @@ class ZulipHandler():
                     # Setting the anchor to the next immediate message after the last fetched message.
                     request["anchor"] = result["messages"][-1]["id"] + 1
 
-            except KeyError:
+            except KeyError as e:
                 # Might occur when the request is not returned with a success status
-                # self.logger(logging.DEBUG, "Error obtaining messages from topic")
+                logger.error(f"Error obtaining messages from topic {e}")
+                logger.error(result)
+                exit
                 return ""
             except :
                 exit
@@ -123,28 +125,22 @@ if __name__ == "__main__":
     zc = ZulipHandler("./.venv/.zuliprc")
     subscriptions = zc.get_subscriptions()["subscriptions"]
     for s in subscriptions:
-        stream = s["name"].replace('/', '___')
-        logger.log(logging.DEBUG, "[STREAM] "+ stream)
-        if not os.path.exists("data/" + stream):
-            os.makedirs("./data/"+stream)
+        stream_name = s["name"]
+        stream_slug = stream_name.replace('/', '___')
+
+        logger.log(logging.DEBUG, "[STREAM] "+ stream_slug)
+        if not os.path.exists("data/" + stream_slug):
+            os.makedirs("./data/"+stream_slug)
         topics = zc.search_topic_in_stream(s["stream_id"], "")
         for topic in topics:
-            logger.log(logging.DEBUG, "[STREAM] "+ stream + "[TOPIC] " + topic)
-            filename = "./data/" + stream + "/" + topic.replace('/', '___')
-            if not os.path.exists(filename):
-                messages = zc.get_topic_messages(stream, topic)
+            logger.log(logging.DEBUG, "[STREAM] "+ stream_slug + "[TOPIC] " + topic)
+            filename = "./data/" + stream_slug + "/" + topic.replace('/', '___')
+            if not os.path.exists(filename) or (os.path.exists(filename) and (os.stat(filename).st_size == 0)):
+                messages = zc.get_topic_messages(stream_name, topic)
                 write_to_file = True
                 if write_to_file:
-                    try:
-                        if not os.path.exists(filename):
-                            # logger.debug("getting messages and writting file " + filename)
-                            with open(filename, 'w') as file:
-                                file.write(messages)
-                        else:
-                            logger.debug("already exists")
-                    except:
-                        logger.error("ERROR while trying to write " + filename)
-                        logger.error(".....Skipping....")
+                    with open(filename, 'w') as file:
+                        file.write(messages)
             else:
                 logger.debug("topic already in file: " + filename)
            
