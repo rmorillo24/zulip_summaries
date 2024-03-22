@@ -13,6 +13,32 @@ This projects is intended to summarize Zulip threads and to offer a a Chat with 
 
 - **Streamlit**: Streamlit is an open-source Python library designed for creating and sharing web apps focused on data analysis and machine learning projects. It allows developers and data scientists to transform data scripts into web apps through simple Python scripts, incorporating interactive elements like sliders, buttons, and charts
 
+## Configuration
+These two configuration files can live anywhere. I'm using .venv by default.
+
+### Zulip client
+Add a .zulip.rc file with:
+
+```
+[api]
+email=_yourzulipuser_
+key=_youapikey__
+site=_yourzulipchatserverurl_
+```
+
+### Ollama and DB
+Add a config.yml file with:
+
+```
+LLM: 'llama2'
+EMBEDDINGS: 'local:llama2'
+WEAVIATE_URL: 'http://127.0.0.1:8080'
+INDEX_NAME: 'theindexofyourchoice'
+CHUNK_SIZE: 512
+OLLAMA_BASE_URL: 'http://127.0.0.1:11434'
+TEMPERATURE: 0
+```
+
 ## Running the application
 ''''
 docker start ollama
