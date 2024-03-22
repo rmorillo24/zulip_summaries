@@ -40,19 +40,20 @@ TEMPERATURE: 0
 ```
 
 ## Running the application
-''''
+```
 docker start ollama
 
 docker exec -it ollama ollama pull _llm model_
 
 docker start weaviate-db
 
-stramlit run main.py
-''''
+streamlit run main.py
+```
 
 if you just want to try ollama, run
 
-> docker exec -it ollama ollama list
-> docker exec -it ollama ollama pull mistral
-> docker exec -it ollama ollama run mistral
-
+```
+docker exec -it ollama ollama list
+docker exec -it ollama ollama pull mistral
+docker exec -it ollama ollama run mistral
+```
