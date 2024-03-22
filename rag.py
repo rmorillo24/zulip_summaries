@@ -4,9 +4,10 @@ from llama_index.core import StorageContext, ServiceContext, VectorStoreIndex, D
 from llama_index.vector_stores.weaviate import WeaviateVectorStore
 from llama_index.core.embeddings import resolve_embed_model
 from llama_index.core import DocumentSummaryIndex
-from llama_index.llms.ollama import Ollama
+# from llama_index.llms.ollama import Ollama
 from llama_index.llms.langchain import LangChainLLM
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.llms import Ollama
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from llama_index.embeddings.langchain import LangchainEmbedding
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.core.query_engine import RetrieverQueryEngine
@@ -36,10 +37,10 @@ SUMMARY_TEMPLATE = (
     "{context_str}\n"
     "---------------------\n"
     "There are different topics discussed in the information provided.\n"
-    "For each topic create a markdown output with the following structure:\n"
-    "#### Topic:\n"
-    "__Keypoints__:\n"
-    "__Decissions and actions__:\n"
+    "For each topic create a markdown output containing the keypoints discussed, arguments in favor and against, and actions to be taken if any:\n"
+    # "#### Topic:\n"
+    # "__Keypoints__:\n"
+    # "__Decissions and actions__:\n"
     # "answer the question: {query_str}\n"
     # "Answer: "
 )
@@ -67,22 +68,28 @@ class Rag:
         lc_embed_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-mpnet-base-v2"
         )
-        Settings.embed_model = LangchainEmbedding(langchain_embeddings=lc_embed_model,model_name=self.cfg.LLM,embed_batch_size=self.cfg.CHUNK_SIZE)
+        Settings.embed_model = LangchainEmbedding(
+            langchain_embeddings=lc_embed_model,
+            model_name=self.cfg.LLM,
+            embed_batch_size=self.cfg.CHUNK_SIZE
+        )
       
         # self.llm = Ollama(
         #     model=self.cfg.LLM,
         #     base_url=self.cfg.OLLAMA_BASE_URL,
         #     temperature=self.cfg.TEMPERATURE
-        # )        
+        # )
+        ollama = Ollama(model=self.cfg.LLM)
         self.llm = LangChainLLM(
             # model=self.cfg.LLM,
             # base_url=self.cfg.OLLAMA_BASE_URL,
             # temperature=self.cfg.TEMPERATURE
-            llm=Ollama(
-                model=self.cfg.LLM,
-                base_url=self.cfg.OLLAMA_BASE_URL,
-                temperature=self.cfg.TEMPERATURE
-            )
+            # llm=Ollama(
+            #     model=self.cfg.LLM,
+            #     base_url=self.cfg.OLLAMA_BASE_URL,
+            #     temperature=self.cfg.TEMPERATURE
+            # )
+            llm = ollama
         )        
         self.vector_store = WeaviateVectorStore(
             weaviate_client=self.client,
@@ -96,14 +103,14 @@ class Rag:
         self.summary_response_synthesizer = get_response_synthesizer(
             response_mode="tree_summarize",
             use_async=False,
-            # llm = self.llm,
+            llm = self.llm,
             summary_template=summary_prompt_template
         )
         self.zulip_question_prompt_template = PromptTemplate(ZULIP_QUERY_TEMPLATE)
         self.zulip_question_response_synthesizer = get_response_synthesizer(
             # response_mode="tree_summarize",
             use_async=False,
-            # llm = self.llm,
+            llm = self.llm,
             text_qa_template=self.zulip_question_prompt_template,
         )
 
@@ -115,7 +122,7 @@ class Rag:
             similarity_top_k=10,
         )        
         self.zulip_query_engine = self.zulip_index.as_query_engine(
-            # llm=self.llm,
+            llm=self.llm,
             response_synthesizer=self.zulip_question_response_synthesizer,
         )
         # self.zulip_query_engine = RetrieverQueryEngine(
@@ -135,7 +142,7 @@ class Rag:
         # to-do: what happens if title doesn't exists: need to ingest    
         doc_summary_index = DocumentSummaryIndex.from_documents(
             self.documents,
-            # llm = self.llm,
+            llm = self.llm,
             response_synthesizer=self.summary_response_synthesizer,
             show_progress=True)
         print("Building summary index...")
